@@ -1,0 +1,2 @@
+# App
+Basic FastAPI project
