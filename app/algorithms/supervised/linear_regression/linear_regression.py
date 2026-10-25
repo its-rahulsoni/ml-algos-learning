@@ -50,6 +50,9 @@ def compute_residuals(y_hat, y):
     """residual = ŷ - y"""
     return y_hat - y
 
+def compute_loss(residuals):
+    """L = average of squared residuals (MSE)."""
+    return np.mean(residuals ** 2)
 
 def fit_closed_form(x, y):
     """Whole fit in one call: x, y in, theta out. Reuse this on any dataset."""
@@ -176,9 +179,8 @@ def demo_exact_line():
       3b + 5w = 30
       subtract: 2w = 6, so w = 3, and then 3b + 9 = 24, so b = 5
     Every point sits exactly on the line, so every residual should be 0 and the loss 0.
-    """
 
-    """
+    -------------------------------------------------------------------------------
     1. How the two equations come from the five sums ?
 
     Answer: The five sums go into two fixed templates. These are the “setting both slopes to zero” equations from your notes:
@@ -253,8 +255,14 @@ def main():
     # One-call version must agree with the step-by-step version
     assert np.allclose(fit_closed_form(x, y), theta)
 
+    # Verify theta using Numpy's built-in function ....
+    theta_from_numpy = np.polyfit(x, y.flatten(), 1)
+    assert np.allclose(theta.flatten(), np.polyfit(x, y.flatten(), 1)[::-1])
+
     demo_exact_line()
 
+def noise_data_testing():
+    
 
 # Runs main() only when this file is executed directly, not when it is imported
 if __name__ == "__main__":
