@@ -68,6 +68,14 @@ def compute_gradient(X, y, theta):
 
     # Xᵀ @ residuals gives Σ residual and Σ x·residual; scale by 2/n
     gradient = (2 / n) * (X.T @ residuals)
+    """
+    dL/db = (2/n) · Σ residualᵢ
+    dL/dw = (2/n) · Σ xᵢ · residualᵢ
+
+    What the gradient is --> Put those two derivatives in one column:
+    gradient = [ dL/db ]  =  [ (2/n) · Σ residual     ]
+               [ dL/dw ]     [ (2/n) · Σ x · residual ]
+    """
 
     # One slope for b and one for w, stacked as a column
     assert gradient.shape == (2, 1), f"gradient should be (2, 1), got {gradient.shape}"
