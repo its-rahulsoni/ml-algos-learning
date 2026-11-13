@@ -233,22 +233,68 @@ def accuracy(y_true, y_pred):
 # n = number of grid positions per axis, so the grid has n * n spots in total.
 # A bigger n gives a smoother boundary but needs more distance calculations.
 # pad = extra margin around the data (0.05 suits features scaled to 0..1).
+# NOTE: The details on the GRID concept and the method params are present int he GOogle Doc file - "ML Algo - KNN" ....
 def make_grid(X, n=200, pad=0.05):
     """Build a grid of spots covering the data, returned as xx, yy tables and a list Q."""
+
     # The grid must cover the data, plus a small margin so edge points are not cut off.
+    # X[:, 0] is the first feature of every point; we find its smallest and largest value.
+    # pad pushes both ends outward, so points at the edge don't sit on the plot border
+    # and the colour is visible all around them.
     x_min, x_max = X[:, 0].min() - pad, X[:, 0].max() + pad
     # Same for the second feature.
+    # Same as above but for the second feature (column 1).
+    # Together the two ranges define the rectangle that the grid has to cover.
     y_min, y_max = X[:, 1].min() - pad, X[:, 1].max() + pad
-    # n evenly spaced x positions and n evenly spaced y positions.
+
+    # linspace gives n evenly spaced numbers from start to stop, both ends included.
+    # step = (stop - start) / (n - 1), because n points have n - 1 gaps between them.
+    # Example with n = 3:
+    #   xs: step = (1.1 - (-0.1)) / 2 = 0.6  ->  -0.1, -0.1 + 0.6 = 0.5, 0.5 + 0.6 = 1.1
+    #       xs = [-0.1, 0.5, 1.1]
+    #   ys: step = (0.9 - 0.1) / 2 = 0.4     ->  0.1, 0.1 + 0.4 = 0.5, 0.5 + 0.4 = 0.9
+    #       ys = [0.1, 0.5, 0.9]
+    # The middle value 0.5 is not from X. It is just the halfway point of each range.
     xs = np.linspace(x_min, x_max, n)
     ys = np.linspace(y_min, y_max, n)
+
+
     # meshgrid returns two tables of shape (len(ys), len(xs)):
     # xx holds the x of every spot, yy holds the y of every spot.
+    """
+    Example: For above xs and ys (calcualted in last step) - 
+    xx = [[-0.1, 0.5, 1.1],           yy = [[0.1, 0.1, 0.1],
+         [-0.1, 0.5, 1.1],                 [0.5, 0.5, 0.5],
+         [-0.1, 0.5, 1.1]]                 [0.9, 0.9, 0.9]]
+    """
     xx, yy = np.meshgrid(xs, ys)
+
+
     # ravel() unrolls each table row by row into a flat list; np.c_ pairs them
     # as two columns. Q has shape (n*n, 2): one row per spot, ready for knn_predict.
+    """
+    knn_predict wants a list with one point per row, not two tables.
+
+    xx.ravel() reads the table row by row into a flat list: [-0.1, 0.5, 1.1, -0.1, 0.5, 1.1, -0.1, 0.5, 1.1]
+    yy.ravel() does the same: [0.1, 0.1, 0.1, 0.5, 0.5, 0.5, 0.9, 0.9, 0.9]
+    np.c_[a, b] places the two lists side by side as two columns.
+
+    Q = [[-0.1, 0.1],
+        [ 0.5, 0.1],
+        [ 1.1, 0.1],
+        [-0.1, 0.5],
+        [ 0.5, 0.5],
+        [ 1.1, 0.5],
+        [-0.1, 0.9],
+        [ 0.5, 0.9],
+        [ 1.1, 0.9]]         shape (9, 2) = (n*n, 2)
+    """
     Q = np.c_[xx.ravel(), yy.ravel()]
+
     # Give back the tables (for drawing) and the list of spots (for predicting).
+    # We return both layouts of the same spots: xx and yy (map layout, for matplotlib)
+    # and Q (list layout, for knn_predict). The order of Q matches xx.ravel(), so the
+    # predictions can later be reshaped back onto the map with preds.reshape(xx.shape).
     return xx, yy, Q
 
 
@@ -267,33 +313,103 @@ def predict_in_chunks(X_train, y_train, Q, k, chunk=5000):
 # =====================================================================
 # STEP 9: THREE PANELS FOR k = 1, 5, 20
 # =====================================================================
+"""
+The whole idea fits in four sentences:
+
+1. Lay a fine net of points over the area where your data lives (make_grid).
+2. Ask KNN “which class?” for every point in the net (predict_in_chunks).
+3. Color each point by the answer, red or blue (reshape + contourf).
+4. Drop your real data points on top (scatter).
+"""
 def plot_boundaries(X_train, y_train, X_test, y_test, ks=(1, 5, 20), n_grid=200,
                     save_as="knn_boundaries.png"):
+    # Method's JOB 1: PICTURE ....
+                    
     """Draw one decision-boundary panel per value of k and print train/test accuracy."""
     # The grid only depends on the data, not on k, so build it once.
     xx, yy, Q = make_grid(X_train, n=n_grid)
+
     # 1 row, len(ks) panels. sharex/sharey force identical axes so panels compare fairly.
+    """
+    # plt.subplots creates the empty canvas: fig is the whole page, axs are the frames on it.
+    # Here: 1 row and len(ks) columns, so one frame per value of k, side by side.
+    # sharex/sharey force the same axis ranges on every frame, so the panels compare fairly.
+    # Nothing is drawn yet; later lines draw into each frame with ax.contourf, ax.scatter, etc.
+    """
+    """
+    fig is the whole canvas, and there is exactly one.
+    Each individual plot inside it is called an axes (matplotlib's official word). I called these “frames”.
+
+    So plt.subplots(2, 3) gives 1 figure containing 6 axes.
+
+    fig (the whole board)
+    +--------+--------+--------+
+    | axes   | axes   | axes   |   <- row 0
+    | [0][0] | [0][1] | [0][2] |
+    +--------+--------+--------+
+    | axes   | axes   | axes   |   <- row 1
+    | [1][0] | [1][1] | [1][2] |
+    +--------+--------+--------+
+
+    “Axes” is a confusing name, since it sounds like just the x and y lines. In matplotlib it means “one complete plot area: its axis lines, its tick numbers, and everything drawn in it”.
+
+    1 -> A single Row ....
+    len(ks) -> now of Columns in each Row ....
+    """
     fig, axs = plt.subplots(1, len(ks), figsize=(5 * len(ks), 4.8), sharex=True, sharey=True)
+
     # Loop over the values of k (not over training points).
+    # zip -> pairs each panel with a k: (panel 1, k = 1), (panel 2, k = 5), (panel 3, k = 20). Everything below runs once per panel.
     for ax, k in zip(axs, ks):
         # Predict a label for every grid spot. Shape (n_grid * n_grid,).
+        # KNN Algo implementation comes into the picture here ....
         preds = predict_in_chunks(X_train, y_train, Q, k)
+
         # Fold the flat answers back into the map layout. Using xx.shape avoids scrambling.
+        """
+        preds is a flat list of 40,000 values, but drawing needs a 200 * 200 table. xx.shape is (200, 200), so reshape folds the list back into the same layout as the grid. 
+        Row by row it undoes the ravel() from make_grid.
+        """
         Z = preds.reshape(xx.shape)
+
         # Paint the regions: label 0 area light red, label 1 area light blue.
+        """
+        contourf fills areas of a map by value. Z only contains 0s and 1s, so levels cuts it into two bands:
+        from -0.5 to 0.5 is label 0, painted light red
+        from 0.5 to 1.5 is label 1, painted light blue
+
+        The -0.5, 0.5 and 1.5 are just cut points placed between the whole numbers. The border between the red and blue areas is the decision boundary.
+        """
         ax.contourf(xx, yy, Z, levels=[-0.5, 0.5, 1.5], colors=["#f4b6b6", "#b6cff4"])
+
         # Draw the training points on top, so you can see why the boundary sits where it does.
+        """
+        Draw the training points on top:
+
+        X_train[:, 0] is all the x values and X_train[:, 1] is all the y values (the column slicing we covered earlier).
+        np.where(y_train == 0, "red", "blue") builds a color list: red where the label is 0, blue otherwise.
+        edgecolor="black" gives each dot an outline and s=22 sets its size.
+        """
         ax.scatter(X_train[:, 0], X_train[:, 1],
                    c=np.where(y_train == 0, "red", "blue"), edgecolor="black", s=22)
+
+
+
+        # Method's JOB 2: SCORES (just for the title) ....
+
         # Training accuracy: each point may not vote for itself (leave-one-out).
         train_acc = accuracy(y_train, knn_predict(X_train, y_train, X_train, min(k, len(X_train) - 1),
                                                  leave_one_out=True))
+
         # Test accuracy: accuracy on points the model has never stored.
         test_acc = accuracy(y_test, knn_predict(X_train, y_train, X_test, k))
+
         # A clear title for each panel.
         ax.set_title(f"k = {k}\nleave-one-out acc {train_acc:.2f} | test acc {test_acc:.2f}")
+
         # Axis labels so the plot is readable.
         ax.set_xlabel("feature 1 (scaled)")
+
     # Only the first panel needs the y label (the axes are shared).
     axs[0].set_ylabel("feature 2 (scaled)")
     # Stop labels from overlapping.
@@ -316,23 +432,30 @@ def compare_with_sklearn(X_train, y_train, X_test, ks=(1, 5, 20), n_grid=100):
         # Tell the user and stop; the rest of the project still works without it.
         print("scikit-learn not installed, skipping comparison (pip install scikit-learn).")
         return
+
     # Build the same kind of grid we use for plotting (coarser, to be quick).
     xx, yy, Q = make_grid(X_train, n=n_grid)
+
     # Compare for each k.
     for k in ks:
         # algorithm="brute" makes sklearn compute all distances, like ours.
         model = KNeighborsClassifier(n_neighbors=k, algorithm="brute")
+
         # "Training" = storing the data, same as ours.
         model.fit(X_train, y_train)
+        
         # Our predictions and sklearn's predictions on the test points.
         ours_test = knn_predict(X_train, y_train, X_test, k)
         theirs_test = model.predict(X_test)
+
         # Our predictions and sklearn's predictions on every grid spot.
         ours_grid = predict_in_chunks(X_train, y_train, Q, k)
         theirs_grid = model.predict(Q)
+
         # How many predictions differ in each case.
         test_diff = int(np.sum(ours_test != theirs_test))
         grid_diff = int(np.sum(ours_grid != theirs_grid))
+        
         # Print a one-line report. Zeros mean a perfect match.
         print(f"  k={k:>2}: test mismatches = {test_diff}/{len(X_test)}, "
               f"grid mismatches = {grid_diff}/{len(Q)}")
@@ -542,6 +665,7 @@ if __name__ == "__main__":
     print(f"  X_train {X_train_s.shape}, y_train {y_train.shape}, X_test {X_test_s.shape}")
 
     # STEPS 8 and 9: boundaries for k = 1, 5, 20 side by side.
+    # The KNN algo execution happens inside this plotting method call ....
     print("\n=== DECISION BOUNDARIES (also saved to knn_boundaries.png) ===")
     plot_boundaries(X_train_s, y_train, X_test_s, y_test, ks=(1, 5, 20))
 
