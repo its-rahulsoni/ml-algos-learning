@@ -52,7 +52,7 @@ evidence = (n_free_and_spam + n_free_and_ham) / n_total
 posterior_spam = likelihood_spam * prior_spam / evidence
 posterior_ham = likelihood_ham * prior_ham / evidence
 
-print(+, posterior_ham, posterior_spam + posterior_ham)
+print(posterior_spam, posterior_ham, posterior_spam + posterior_ham)
 
 
 """
